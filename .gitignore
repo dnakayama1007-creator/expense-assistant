@@ -1,0 +1,19 @@
+node_modules/
+.env
+
+# 機密情報ファイル
+freee_config.json
+google_service_account.json
+
+# データファイル（機密情報含む可能性）
+discord_expenses.json
+processed_msg_ids.json
+
+# 領収書画像（個人情報）
+receipts/
+
+# 実行ファイル（サイズが大きい）
+cloudflared.exe
+
+# Office文書
+*.docx

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>経費精算アシスタント | Expense Assistant</title>
+    <meta name="description" content="領収書を簡単管理。経費精算をスマートに効率化する経費管理アプリケーション。">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">💰</span>
+                <span id="ocrCountBadge"
+                    style="font-size:10px;color:#888;margin-left:8px;background:#ffffff11;padding:2px 8px;border-radius:10px;"
+                    title="月間OCRリクエスト数">📷 0/700</span>
+            </div>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item" data-page="dashboard">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">ダッシュボード</span>
+            </li>
+            <li class="nav-item" data-page="add">
+                <span class="nav-icon">➕</span>
+                <span class="nav-label">経費を追加</span>
+            </li>
+            <li class="nav-item active" data-page="list">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">経費一覧</span>
+            </li>
+            <li class="nav-item nav-item-purchase" onclick="createPurchaseData(false)">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label">仕入データ作成</span>
+            </li>
+            <li class="nav-item nav-item-report" onclick="generateStockedReport()">
+                <span class="nav-icon">🖨️</span>
+                <span class="nav-label">入庫済みレポート</span>
+            </li>
+            <li class="nav-item nav-item-revert" onclick="revertPrintedToStocked()">
+                <span class="nav-icon">↩️</span>
+                <span class="nav-label">差し戻し</span>
+            </li>
+            <li class="nav-item nav-item-complete" onclick="completePrinted()">
+                <span class="nav-icon">✅</span>
+                <span class="nav-label">一括清算</span>
+            </li>
+            <li class="nav-item" onclick="nextMonthSettlement()" style="color:#a29bfe;">
+                <span class="nav-icon">📅</span>
+                <span class="nav-label">翌月精算</span>
+            </li>
+            <li class="nav-item nav-item-freee" onclick="openFreeeSettings()">
+                <span class="nav-icon">🔗</span>
+                <span class="nav-label">freee連携</span>
+            </li>
+        </ul>
+        <div class="sidebar-footer">
+            <div class="mini-pc-status">
+                <span class="status-dot"></span>
+                <span>ミニPC稼働中</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="top-header">
+            <button class="menu-toggle" id="menuToggle">☰</button>
+            <h1 id="pageTitle" style="display:none;">経費一覧</h1>
+            <div class="header-actions">
+                <span class="current-date" id="currentDate"></span>
+            </div>
+        </header>
+
+        <!-- Dashboard Page -->
+        <section class="page" id="page-dashboard">
+            <div class="stats-grid">
+                <div class="stat-card stat-total">
+                    <div class="stat-icon">💴</div>
+                    <div class="stat-info">
+                        <span class="stat-label">今月の合計</span>
+                        <span class="stat-value" id="statTotal">¥0</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-count">
+                    <div class="stat-icon">🧾</div>
+                    <div class="stat-info">
+                        <span class="stat-label">今月の件数</span>
+                        <span class="stat-value" id="statCount">0件</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-pending">
+                    <div class="stat-icon">⏳</div>
+                    <div class="stat-info">
+                        <span class="stat-label">未清算</span>
+                        <span class="stat-value" id="statPending">0件</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-arrived">
+                    <div class="stat-icon">📦</div>
+                    <div class="stat-info">
+                        <span class="stat-label">自宅着</span>
+                        <span class="stat-value" id="statArrived">0件</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-stocked">
+                    <div class="stat-icon">🏢</div>
+                    <div class="stat-info">
+                        <span class="stat-label">入庫済み</span>
+                        <span class="stat-value" id="statStocked">0件</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-approved">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-label">清算済み</span>
+                        <span class="stat-value" id="statApproved">0件</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="card chart-card">
+                    <h2 class="card-title">カテゴリ別支出</h2>
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                    <div class="category-legend" id="categoryLegend"></div>
+                </div>
+                <div class="card chart-card">
+                    <h2 class="card-title">月別推移</h2>
+                    <div class="chart-container">
+                        <canvas id="monthlyChart"></canvas>
+                    </div>
+                </div>
+                <div class="card recent-card">
+                    <h2 class="card-title">最近の経費</h2>
+                    <div class="recent-list" id="recentList">
+                        <p class="empty-message">まだ経費が登録されていません</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Add Expense Page -->
+        <section class="page" id="page-add">
+            <div class="add-expense-container">
+                <div class="card form-card">
+                    <h2 class="card-title">💳 新しい経費を登録</h2>
+
+                    <!-- Memo Text Parser -->
+                    <div class="memo-parser-section" id="memoParserSection">
+                        <div class="memo-parser-header" id="memoParserToggle">
+                            <div class="memo-parser-title">
+                                <span class="memo-icon">📋</span>
+                                <span>メモから読み取り</span>
+                                <span class="memo-badge">LINE対応</span>
+                            </div>
+                            <span class="memo-toggle-arrow" id="memoArrow">▼</span>
+                        </div>
+                        <div class="memo-parser-body" id="memoParserBody">
+                            <p class="memo-parser-description">LINEやメモ帳のテキストを貼り付けると、日付・金額・カテゴリ・内容を自動で読み取ります。</p>
+                            <div class="memo-input-wrapper">
+                                <textarea id="memoInput" class="memo-textarea" rows="5"
+                                    placeholder="例：&#10;2/24 タクシー 新宿→渋谷 1500円&#10;2/23 スタバ 打ち合わせ ¥1,280&#10;交通費 2月20日 電車 池袋→東京 ¥540"></textarea>
+                                <div class="memo-actions">
+                                    <button type="button" class="btn btn-primary" id="parseMemoBtn">
+                                        <span>🤖 読み取る</span>
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="clearMemoBtn">
+                                        <span>🗑️ クリア</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Parse Results -->
+                            <div class="memo-parse-results" id="memoParseResults" style="display:none;">
+                                <div class="memo-results-header">
+                                    <span>✅ 読み取り結果</span>
+                                </div>
+                                <div class="memo-parsed-items" id="memoParsedItems"></div>
+                            </div>
+                            <!-- Example formats -->
+                            <div class="memo-examples">
+                                <span class="memo-examples-title">💡 対応形式の例：</span>
+                                <div class="memo-example-tags">
+                                    <span class="memo-tag">2/24 タクシー 1500円</span>
+                                    <span class="memo-tag">交通費 ¥3,200</span>
+                                    <span class="memo-tag">スタバ 打合せ 1280円</span>
+                                    <span class="memo-tag">2月20日 電車 540円</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-divider">
+                        <span>または 手動で入力</span>
+                    </div>
+
+                    <form id="expenseForm">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="expenseDate">日付 <span class="required">*</span></label>
+                                <input type="date" id="expenseDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseUnitPrice">単価 <span class="required">*</span></label>
+                                <div class="input-with-prefix">
+                                    <span class="input-prefix">¥</span>
+                                    <input type="number" id="expenseUnitPrice" placeholder="1,000" required min="1">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseQuantity">数量 <span class="required">*</span></label>
+                                <input type="number" id="expenseQuantity" value="1" required min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>金額（自動計算）</label>
+                                <div class="calculated-amount" id="calculatedAmount">¥0</div>
+                                <input type="hidden" id="expenseAmount">
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseCategory">カテゴリ <span class="required">*</span></label>
+                                <select id="expenseCategory" required>
+                                    <option value="">選択してください</option>
+                                    <option value="交通費">🚃 交通費</option>
+                                    <option value="宿泊費">🏨 宿泊費</option>
+                                    <option value="会議費">☕ 会議費</option>
+                                    <option value="接待交際費">🍽️ 接待交際費</option>
+                                    <option value="通信費">📱 通信費</option>
+                                    <option value="消耗品費">🖊️ 消耗品費</option>
+                                    <option value="書籍・研修費">📚 書籍・研修費</option>
+                                    <option value="その他">📦 その他</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="expensePayment">購入店舗</label>
+                                <input type="text" id="expensePayment" placeholder="例：Yahoo(ジョーシン)、Amazon など">
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="expenseDescription">内容・メモ <span class="required">*</span></label>
+                                <textarea id="expenseDescription" placeholder="例：○○駅→△△駅 往復、取引先との打ち合わせなど" rows="3"
+                                    required></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Receipt Upload -->
+                        <div class="receipt-upload-section">
+                            <h3>📸 領収書を添付 <span class="ocr-badge">🤖 AI金額読取対応</span></h3>
+                            <div class="dropzone" id="dropzone">
+                                <div class="dropzone-content">
+                                    <span class="dropzone-icon">📷</span>
+                                    <p>ここに領収書の画像をドラッグ＆ドロップ</p>
+                                    <p class="dropzone-hint">または クリックしてファイルを選択</p>
+                                    <p class="dropzone-hint ocr-hint">📝 画像から金額を自動で読み取ります</p>
+                                </div>
+                                <input type="file" id="receiptFile" accept="image/*" hidden>
+                            </div>
+                            <div class="receipt-preview" id="receiptPreview" style="display:none;">
+                                <img id="receiptImage" src="" alt="領収書プレビュー">
+                                <button type="button" class="btn-remove-receipt" id="removeReceipt">✕ 削除</button>
+                            </div>
+                            <!-- OCR Processing Indicator -->
+                            <div class="ocr-status" id="ocrStatus" style="display:none;">
+                                <div class="ocr-status-header">
+                                    <span class="ocr-spinner"></span>
+                                    <span class="ocr-status-text" id="ocrStatusText">領収書を解析中...</span>
+                                </div>
+                                <div class="ocr-progress-bar">
+                                    <div class="ocr-progress-fill" id="ocrProgressFill"></div>
+                                </div>
+                                <span class="ocr-progress-label" id="ocrProgressLabel">0%</span>
+                            </div>
+                            <!-- OCR Results -->
+                            <div class="ocr-results" id="ocrResults" style="display:none;">
+                                <div class="ocr-results-header">
+                                    <span>🤖 AI読取結果</span>
+                                    <button type="button" class="btn btn-sm btn-secondary"
+                                        id="ocrToggleDetail">詳細を見る</button>
+                                </div>
+                                <div class="ocr-detected-amounts" id="ocrDetectedAmounts"></div>
+                                <div class="ocr-raw-text" id="ocrRawText" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="reset" class="btn btn-secondary">リセット</button>
+                            <button type="submit" class="btn btn-primary">
+                                <span>💾 経費を登録</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Quick Tips -->
+                <div class="card tips-card">
+                    <h3>💡 ヒント</h3>
+                    <ul class="tips-list">
+                        <li>LINEで撮った領収書の写真をそのままドラッグ＆ドロップできます</li>
+                        <li>📸 <strong>領収書の画像から金額を自動読取</strong>します（AI-OCR機能）</li>
+                        <li>読み取った金額は候補として表示されます。クリックで自動入力！</li>
+                        <li>メモ欄に詳細を書くと、後で精算する時に便利です</li>
+                        <li>登録した経費はCSVでエクスポートできます</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Expense List Page -->
+        <section class="page active" id="page-list">
+            <div class="card">
+                <div class="list-header">
+                    <h2 class="card-title">📋 経費一覧</h2>
+                    <div class="list-filters">
+                        <div class="filter-group">
+                            <label>月:</label>
+                            <input type="month" id="filterMonth">
+                        </div>
+                        <div class="filter-group">
+                            <label>カテゴリ:</label>
+                            <select id="filterCategory">
+                                <option value="">すべて</option>
+                                <option value="交通費">交通費</option>
+                                <option value="宿泊費">宿泊費</option>
+                                <option value="会議費">会議費</option>
+                                <option value="接待交際費">接待交際費</option>
+                                <option value="通信費">通信費</option>
+                                <option value="消耗品費">消耗品費</option>
+                                <option value="書籍・研修費">書籍・研修費</option>
+                                <option value="その他">その他</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>ステータス:</label>
+                            <select id="filterStatus">
+                                <option value="">すべて</option>
+                                <option value="未清算">未清算</option>
+                                <option value="自宅着">自宅着</option>
+                                <option value="入庫済み">入庫済み</option>
+                                <option value="清算済み">清算済み</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="expense-table-wrapper">
+                    <table class="expense-table" id="expenseTable">
+                        <thead>
+                            <tr>
+                                <th>操作</th>
+                                <th>領収書</th>
+                                <th>購入店舗</th>
+                                <th>注文番号</th>
+                                <th>購入者</th>
+                                <th>ステータス</th>
+                                <th>商品名</th>
+                                <th>単価</th>
+                                <th>数量</th>
+                                <th>入庫数</th>
+                                <th>金額</th>
+                                <th>日付</th>
+                                <th>未着数</th>
+                                <th>メモ</th>
+                                <th>No.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenseTableBody">
+                            <tr>
+                                <td colspan="13" class="empty-table">経費データがありません</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-footer">
+                    <span class="table-summary" id="tableSummary">合計: ¥0（0件）</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Export Page -->
+        <section class="page" id="page-export">
+            <div class="export-container">
+                <div class="card export-card">
+                    <h2 class="card-title">📥 経費データのエクスポート</h2>
+                    <p class="export-description">経費データをCSV形式でダウンロードできます。会計ソフトへの取り込みや、経理担当者への提出にご利用ください。</p>
+
+                    <div class="export-options">
+                        <div class="export-option">
+                            <h3>📅 期間指定エクスポート</h3>
+                            <div class="export-date-range">
+                                <div class="form-group">
+                                    <label for="exportFrom">開始月</label>
+                                    <input type="month" id="exportFrom">
+                                </div>
+                                <span class="date-separator">〜</span>
+                                <div class="form-group">
+                                    <label for="exportTo">終了月</label>
+                                    <input type="month" id="exportTo">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" id="exportCSV">
+                                <span>📄 CSVダウンロード</span>
+                            </button>
+                        </div>
+
+                        <div class="export-option">
+                            <h3>🗂️ 全データエクスポート</h3>
+                            <p>登録されているすべての経費データをダウンロードします。</p>
+                            <button class="btn btn-secondary" id="exportAllCSV">
+                                <span>📦 全データCSVダウンロード</span>
+                            </button>
+                        </div>
+
+                        <div class="export-option">
+                            <h3>💾 バックアップ</h3>
+                            <p>データのバックアップを作成します（JSON形式）。復元にも使えます。</p>
+                            <div class="backup-actions">
+                                <button class="btn btn-secondary" id="exportBackup">
+                                    <span>⬇️ バックアップ作成</span>
+                                </button>
+                                <button class="btn btn-secondary" id="importBackup">
+                                    <span>⬆️ バックアップ復元</span>
+                                </button>
+                                <input type="file" id="importFile" accept=".json" hidden>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Receipt Modal -->
+    <div class="modal" id="receiptModal">
+        <div class="modal-overlay" id="modalOverlay"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">✕</button>
+            <img id="modalImage" src="" alt="領収書">
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="app.js?v=20260307c"></script>
+</body>
+
+</html>
